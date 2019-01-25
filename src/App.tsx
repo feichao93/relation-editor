@@ -36,7 +36,7 @@ export default class App extends React.Component {
       e('ReactJS'),
       e('将数据渲染为HTML视图'),
       e('JavaScript'),
-      e('React#5'),
+      e('React#5'), // React#5 表示 文本中第五个React字串
       e('程序员'),
       e('子组件不能直接影响外层组件'),
       e('模型'),
@@ -49,17 +49,17 @@ export default class App extends React.Component {
       e('加星数量'),
       e('第二'),
     ])
-    editor.addLink({ a: 'React', b: 'React.js', label: '别名' })
-    editor.addLink({ a: 'React', b: 'ReactJS', label: '别名' })
-    editor.addLink({ a: 'React', b: '将数据渲染为HTML视图', label: '作用' })
-    editor.addLink({ a: 'React', b: 'JavaScript', label: '所使用的编程语言' })
-    editor.addLink({ a: 'React#5', b: '程序员', label: '服务' })
-    editor.addLink({ a: '它', b: 'React#5', label: '指代' })
-    editor.addLink({ a: '子组件不能直接影响外层组件', b: '模型', label: '具体内容' })
-    editor.addLink({ a: '个人开发者和企业', b: '社群', label: '组成部分' })
-    editor.addLink({ a: 'React#7', b: 'React Native', label: '并列' })
-    editor.addLink({ a: 'React#7', b: 'GitHub', label: '开源' })
-    editor.addLink({ a: '加星数量', b: '第二', label: '排名' })
+    editor.addLink('React', '@别名', 'React.js')
+    editor.addLink('React', '@别名', 'ReactJS')
+    editor.addLink('React', '@作用', '将数据渲染为HTML视图')
+    editor.addLink('React', '@所使用的编程语言', 'JavaScript')
+    editor.addLink('React#5', '@服务', '程序员')
+    editor.addLink('它', '@指代', 'React#5')
+    editor.addLink('子组件不能直接影响外层组件', '@具体内容', '模型')
+    editor.addLink('个人开发者和企业', '@组成部分', '社群')
+    editor.addLink('React#7', '@并列', 'React Native')
+    editor.addLink('React#7', '@开源', 'GitHub')
+    editor.addLink('加星数量', '@排名', '第二')
   }
 
   render() {

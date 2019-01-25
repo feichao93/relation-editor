@@ -83,7 +83,12 @@ export default class RelationEditor {
     return { id, line, left, width: box.width, fill: 'steelblue' }
   }
 
-  addLink(link: Link) {
+  addLink(a: string, label: string, b: string) {
+    // TODO 测试用 id
+    return this._addLink({ id: `${a}-${label}-${b}`, a, b, label })
+  }
+
+  private _addLink(link: Link) {
     const A = this.getEntityInfo(link.a)
     const B = this.getEntityInfo(link.b)
     this.decorations.addRect(A)
@@ -101,9 +106,12 @@ export default class RelationEditor {
     })
 
     this.decorations.addArrow({
+      id: link.id,
       startId: link.a,
       endId: link.b,
     })
+
+    return link.id
   }
 
   // TODO dispose() {}

@@ -1,8 +1,8 @@
 import * as d3 from 'd3'
 import { EventEmitter } from 'events'
-import { IncrementalMap, randomId } from './common-utils'
 import { ARROW_MARGIN, LABEL_FONT, LINE_HEIGHT } from './constants'
 import { makeMeasurer } from './layout-utils'
+import { IncrementalMap, randomId } from './utils'
 
 export const marginChange = 'margin-change'
 
@@ -27,6 +27,23 @@ export interface TextInfo {
   textContent: string
 }
 
+function getRectPos(rect: RectInfo): [number, number] {
+  return [rect.line, rect.left + rect.width / 2]
+}
+
+function sortBy<T>(arr: T[], fn: (item: T) => number[]) {
+  return arr.slice().sort((a, b) => {
+    const aa = fn(a)
+    const bb = fn(b)
+    for (let i = 0; i < aa.length; i++) {
+      if (aa[i] !== bb[i]) {
+        return aa[i] - bb[i]
+      }
+    }
+    return 0
+  })
+}
+
 export default class DecorationManager extends EventEmitter {
   private readonly rects: Array<RectInfo> = []
   private readonly texts: Array<TextInfo> = []
@@ -35,8 +52,8 @@ export default class DecorationManager extends EventEmitter {
   private readonly margins: number[] = []
   private readonly labelMeasure = makeMeasurer(LABEL_FONT)
 
-  /** 统计一个 rect 对应了多少个箭头的端点 */
-  private readonly endpointCountMap = new IncrementalMap<string>()
+  /** 记录一个 rect 上面需要放置多少个箭头端点 */
+  private readonly tickCountMap = new IncrementalMap<string>()
 
   constructor(readonly container: HTMLDivElement) {
     super()
@@ -85,14 +102,83 @@ export default class DecorationManager extends EventEmitter {
   }
 
   private updateArrows() {
-    // 记录每个 rect 上已经放置了多少个箭头起点/终点
-    const endpointPlacementCount = new IncrementalMap<string>()
     const labelPlacementCount = new IncrementalMap<number>()
+
+    const rectById = new Map(this.rects.map(rect => [rect.id, rect] as [string, RectInfo]))
+    const sortedRects = sortBy(this.rects, getRectPos)
+
+    const getRelatedRects = ({ id }: RectInfo) => {
+      return this.arrows
+        .filter(({ startId, endId }) => startId === id || endId === id)
+        .map(arrow => {
+          if (arrow.startId === id) {
+            return arrow.endId
+          } else if (arrow.endId === id) {
+            return arrow.startId
+          }
+        })
+    }
+
+    function split(baseRectId: string, relatedRectIds: string[]) {
+      const x = getRectPos(rectById.get(baseRectId))[1]
+
+      const leftPart = relatedRectIds
+        .filter(id => getRectPos(rectById.get(id))[1] <= x)
+        .sort((a, b) => getRectPos(rectById.get(a))[1] - getRectPos(rectById.get(b))[1])
+
+      const rightPart = relatedRectIds
+        .filter(id => getRectPos(rectById.get(id))[1] > x)
+        .sort((a, b) => getRectPos(rectById.get(a))[1] - getRectPos(rectById.get(b))[1])
+
+      return { leftPart, rightPart }
+    }
+
+    const findArrow = (id1: string, id2: string) => {
+      return this.arrows.find(
+        ({ startId, endId }) =>
+          (startId === id1 && endId === id2) || (startId === id2 && endId === id1),
+      )
+    }
+
+    const tickInfoMap = new Map<string, { start: number; end: number }>()
+
+    for (const baseRect of sortedRects) {
+      // 确定 baseRect 上每个 tick 的分配情况
+      const { leftPart, rightPart } = split(baseRect.id, getRelatedRects(baseRect))
+
+      for (let i = 0; i < leftPart.length; i++) {
+        const leftRectId = leftPart[i]
+        const arrow = findArrow(baseRect.id, leftRectId)
+        const tickInfo = tickInfoMap.get(arrow.id) || { start: -1, end: -1 }
+        // arrow 在 baseRect 上的 tick
+        const tick = leftPart.length - 1 - i
+        if (leftRectId === arrow.startId) {
+          tickInfo.end = tick
+        } else {
+          tickInfo.start = tick
+        }
+        tickInfoMap.set(arrow.id, tickInfo)
+      }
+
+      for (let i = 0; i < rightPart.length; i++) {
+        const rightRectId = rightPart[i]
+        const arrow = findArrow(baseRect.id, rightRectId)
+        const tickInfo = tickInfoMap.get(arrow.id) || { start: -1, end: -1 }
+        // arrow 在 baseRect 上的 tick
+        const tick = rightPart.length - 1 - i + leftPart.length
+        if (rightRectId === arrow.startId) {
+          tickInfo.end = tick
+        } else {
+          tickInfo.start = tick
+        }
+        tickInfoMap.set(arrow.id, tickInfo)
+      }
+    }
 
     const arrowJoin = this.wrapper
       .select('.arrow-layer')
       .selectAll<SVGPathElement, null>('.arrow')
-      .data(this.arrows, (d: ArrowInfo) => `${d.startId}:${d.endId}`)
+      .data(this.arrows, d => d.id)
     arrowJoin.exit().remove()
 
     const arrow = arrowJoin
@@ -112,14 +198,14 @@ export default class DecorationManager extends EventEmitter {
       const endRect = this.rects.find(rect => rect.id === d.endId)
       const labelLine = Math.min(startRect.line, endRect.line)
 
-      const startPlacementRatio =
-        endpointPlacementCount.incAndGet(startRect.id) /
-        (this.endpointCountMap.get(startRect.id) + 1)
-      const startX = startRect.left + startRect.width * startPlacementRatio
+      const startTick = tickInfoMap.get(d.id).start
+      const startX =
+        startRect.left +
+        (startRect.width * (startTick + 1)) / (this.tickCountMap.get(startRect.id) + 1)
 
-      const endPlacementRatio =
-        endpointPlacementCount.incAndGet(endRect.id) / (this.endpointCountMap.get(endRect.id) + 1)
-      const endX = endRect.left + endRect.width * endPlacementRatio
+      const endTick = tickInfoMap.get(d.id).end
+      const endX =
+        endRect.left + (endRect.width * (endTick + 1)) / (this.tickCountMap.get(endRect.id) + 1)
 
       const startY = this.getY(startRect.line)
       const labelY = this.getY(labelLine) - margin - 25 * labelPlacementCount.getAndInc(labelLine)
@@ -174,11 +260,11 @@ export default class DecorationManager extends EventEmitter {
     this.emit(marginChange, line, margin, oldMargin)
   }
 
-  addArrow(arrowInfo: Partial<ArrowInfo>) {
+  addArrow(arrowInfo: ArrowInfo) {
     arrowInfo.id = arrowInfo.id || randomId()
     this.arrows.push(arrowInfo as ArrowInfo)
-    this.endpointCountMap.incAndGet(arrowInfo.startId)
-    this.endpointCountMap.incAndGet(arrowInfo.endId)
+    this.tickCountMap.incAndGet(arrowInfo.startId)
+    this.tickCountMap.incAndGet(arrowInfo.endId)
 
     const startRect = this.rects.find(rect => rect.id === arrowInfo.startId)
     const endRect = this.rects.find(rect => rect.id === arrowInfo.endId)

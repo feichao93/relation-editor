@@ -1,11 +1,12 @@
 export interface SpanInfo {
-  id?: string
+  id: string
   s: number
   e: number
   color?: string
 }
 
 export interface Link {
+  id: string
   a: string
   b: string
   label: string

@@ -2,7 +2,7 @@ import * as d3 from 'd3'
 import { EventEmitter } from 'events'
 import { ARROW_MARGIN, LABEL_FONT, LINE_HEIGHT } from './constants'
 import { makeMeasurer } from './layout-utils'
-import { IncrementalMap, randomId } from './utils'
+import { DefaultMap, IncrementalMap, randomId } from './utils'
 
 export const marginChange = 'margin-change'
 
@@ -27,8 +27,8 @@ export interface TextInfo {
   textContent: string
 }
 
-function getRectPos(rect: RectInfo): [number, number] {
-  return [rect.line, rect.left + rect.width / 2]
+function getRectPos(rect: RectInfo) {
+  return { line: rect.line, x: rect.left + rect.width / 2 }
 }
 
 function sortBy<T>(arr: T[], fn: (item: T) => number[]) {
@@ -85,12 +85,12 @@ export default class DecorationManager extends EventEmitter {
 
     const rectJoin = this.wrapper
       .select('.text-layer')
-      .selectAll('text')
+      .selectAll<SVGTextElement, null>('text')
       .data(this.texts)
 
     const textEnter = rectJoin.enter().append('text')
     rectJoin.exit().remove()
-    const text = rectJoin.merge(textEnter as any)
+    const text = rectJoin.merge(textEnter)
 
     text
       // TODO 创建一个 measurer 用来调整 x 的值
@@ -105,51 +105,47 @@ export default class DecorationManager extends EventEmitter {
     const labelPlacementCount = new IncrementalMap<number>()
 
     const rectById = new Map(this.rects.map(rect => [rect.id, rect] as [string, RectInfo]))
-    const sortedRects = sortBy(this.rects, getRectPos)
+    const sortedRects = sortBy(this.rects, rect => {
+      const pos = getRectPos(rect)
+      return [pos.line, pos.x]
+    })
 
-    const getRelatedRects = ({ id }: RectInfo) => {
-      return this.arrows
-        .filter(({ startId, endId }) => startId === id || endId === id)
-        .map(arrow => {
-          if (arrow.startId === id) {
-            return arrow.endId
-          } else if (arrow.endId === id) {
-            return arrow.startId
-          }
-        })
+    const relatedRectsMap = new DefaultMap<string, string[]>(() => [])
+    for (const { startId, endId } of this.arrows) {
+      relatedRectsMap.get(startId).push(endId)
+      relatedRectsMap.get(endId).push(startId)
     }
 
     function split(baseRectId: string, relatedRectIds: string[]) {
-      const x = getRectPos(rectById.get(baseRectId))[1]
-
-      const leftPart = relatedRectIds
-        .filter(id => getRectPos(rectById.get(id))[1] <= x)
-        .sort((a, b) => getRectPos(rectById.get(a))[1] - getRectPos(rectById.get(b))[1])
-
-      const rightPart = relatedRectIds
-        .filter(id => getRectPos(rectById.get(id))[1] > x)
-        .sort((a, b) => getRectPos(rectById.get(a))[1] - getRectPos(rectById.get(b))[1])
-
-      return { leftPart, rightPart }
+      const x = (id: string) => getRectPos(rectById.get(id)).x
+      const relatedSorted = sortBy(relatedRectIds, id => [x(id)])
+      const baseX = x(baseRectId)
+      return {
+        leftPart: relatedSorted.filter(id => x(id) <= baseX),
+        rightPart: relatedSorted.filter(id => x(id) > baseX),
+      }
     }
 
-    const findArrow = (id1: string, id2: string) => {
-      return this.arrows.find(
+    const findArrow = (id1: string, id2: string) =>
+      this.arrows.find(
         ({ startId, endId }) =>
           (startId === id1 && endId === id2) || (startId === id2 && endId === id1),
       )
-    }
 
-    const tickInfoMap = new Map<string, { start: number; end: number }>()
+    const tickInfoMap = new DefaultMap<string, { start: number; end: number }>(() => ({
+      start: -1,
+      end: -1,
+    }))
 
     for (const baseRect of sortedRects) {
       // 确定 baseRect 上每个 tick 的分配情况
-      const { leftPart, rightPart } = split(baseRect.id, getRelatedRects(baseRect))
+      const relatedRectIds = relatedRectsMap.get(baseRect.id)
+      const { leftPart, rightPart } = split(baseRect.id, relatedRectIds)
 
       for (let i = 0; i < leftPart.length; i++) {
         const leftRectId = leftPart[i]
         const arrow = findArrow(baseRect.id, leftRectId)
-        const tickInfo = tickInfoMap.get(arrow.id) || { start: -1, end: -1 }
+        const tickInfo = tickInfoMap.get(arrow.id)
         // arrow 在 baseRect 上的 tick
         const tick = leftPart.length - 1 - i
         if (leftRectId === arrow.startId) {
@@ -163,7 +159,7 @@ export default class DecorationManager extends EventEmitter {
       for (let i = 0; i < rightPart.length; i++) {
         const rightRectId = rightPart[i]
         const arrow = findArrow(baseRect.id, rightRectId)
-        const tickInfo = tickInfoMap.get(arrow.id) || { start: -1, end: -1 }
+        const tickInfo = tickInfoMap.get(arrow.id)
         // arrow 在 baseRect 上的 tick
         const tick = rightPart.length - 1 - i + leftPart.length
         if (rightRectId === arrow.startId) {
@@ -226,13 +222,13 @@ export default class DecorationManager extends EventEmitter {
   private updateRects() {
     const rectJoin = this.wrapper
       .select('.rect-layer')
-      .selectAll('rect')
+      .selectAll<SVGRectElement, null>('rect')
       .data(this.rects)
     const rect = rectJoin
       .enter()
       .append('rect')
       .attr('data-id', d => d.id)
-      .merge(rectJoin as any)
+      .merge(rectJoin)
 
     rect
       .attr('x', d => d.left)

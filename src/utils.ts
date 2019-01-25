@@ -1,16 +1,25 @@
-export function randomId(len = 5) {
+export function randomId(len = 7) {
   return Math.random()
     .toString(36)
     .substring(2, 2 + len)
 }
 
-export class IncrementalMap<K> extends Map<K, number> {
+export class DefaultMap<K, V> extends Map<K, V> {
+  constructor(readonly defaulter: () => V) {
+    super()
+  }
+
   get(k: K) {
-    if (this.has(k)) {
-      return super.get(k)
-    } else {
-      return 0
+    if (!this.has(k)) {
+      this.set(k, this.defaulter())
     }
+    return super.get(k)
+  }
+}
+
+export class IncrementalMap<K> extends DefaultMap<K, number> {
+  constructor() {
+    super(() => 0)
   }
 
   incAndGet(k: K) {

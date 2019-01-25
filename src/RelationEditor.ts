@@ -48,7 +48,7 @@ export default class RelationEditor {
     const lineInfoList = layout(this.rower(this.text), this.entities)
     const lineJoin = d3
       .select(this.contentWrapper)
-      .selectAll('.line')
+      .selectAll<HTMLDivElement, null>('.line')
       .data(lineInfoList)
     lineJoin.exit().remove()
     const line = lineJoin
@@ -56,7 +56,7 @@ export default class RelationEditor {
       .append('div')
       .classed('line', true)
       .attr('data-line', (d, i) => i)
-      .merge(lineJoin as any)
+      .merge(lineJoin)
 
     const spanJoin = line.selectAll('span').data(d => d, (d: Partial<Entity>) => `${d.s}-${d.e}`)
     spanJoin.exit().remove()
@@ -85,7 +85,8 @@ export default class RelationEditor {
 
   addLink(a: string, label: string, b: string) {
     // TODO 测试用 id
-    return this._addLink({ id: `${a}-${label}-${b}`, a, b, label })
+    const testId = `${a}-${label}-${b}`
+    return this._addLink({ id: testId, a, b, label })
   }
 
   private _addLink(link: Link) {

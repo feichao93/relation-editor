@@ -1,0 +1,63 @@
+{
+  "name": "relation-editor",
+  "version": "0.1.0-SNAPSHOT",
+  "license": "MIT",
+  "scripts": {
+    "start": "webpack-dev-server --mode=development",
+    "build": "webpack --mode=production",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@types/d3": "^5.7.0",
+    "@types/invariant": "^2.2.29",
+    "@types/node": "^10.12.18",
+    "@types/react": "^16.7.20",
+    "@types/react-dom": "^16.0.11",
+    "classnames": "^2.2.6",
+    "d3": "^5.7.0",
+    "history": "^4.7.2",
+    "immutable": "^4.0.0-rc.12",
+    "invariant": "^2.2.4",
+    "normalize.css": "^8.0.0",
+    "react": "16.8.0-alpha.1",
+    "react-dom": "16.8.0-alpha.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^23.3.13",
+    "css-loader": "^2.0.2",
+    "html-webpack-plugin": "^3.2.0",
+    "husky": "^1.2.1",
+    "jest": "^23.6.0",
+    "lint-staged": "^8.1.0",
+    "prettier": "^1.16.1",
+    "style-loader": "^0.23.1",
+    "stylus": "^0.54.5",
+    "stylus-loader": "^3.0.2",
+    "ts-jest": "^23.10.5",
+    "ts-loader": "^5.3.2",
+    "typescript": "^3.2.4",
+    "webpack": "^4.29.0",
+    "webpack-cli": "^3.1.2",
+    "webpack-dev-server": "^3.1.14"
+  },
+  "lint-staged": {
+    "*.js": [
+      "prettier --write",
+      "git add"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "prettier": {
+    "printWidth": 100,
+    "semi": false,
+    "singleQuote": true,
+    "trailingComma": "all"
+  },
+  "jest": {
+    "preset": "ts-jest"
+  }
+}

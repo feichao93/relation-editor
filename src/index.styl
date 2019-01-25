@@ -1,0 +1,33 @@
+body {
+  font-family -apple-system, BlinkMacSystemFont, Segoe WPC, Segoe UI, HelveticaNeue-Light, Ubuntu, Droid Sans, "Microsoft YaHei", sans-serif
+}
+
+.editor {
+  border 1px solid #ccc
+  width 1000px
+  font-size 20px
+  position relative
+}
+
+.content-wrapper {
+  position relative
+  z-index 1
+}
+
+.decoration-wrapper {
+  position absolute
+  top 0
+  left 0
+  width 100%
+  height 100%
+}
+
+.line {
+  height 40px
+  white-space nowrap
+  border-bottom 1px dashed #ccc
+
+  > span {
+    line-height 40px
+  }
+}

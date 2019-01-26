@@ -1,5 +1,4 @@
 export const ARROW_MARGIN = 10
-export const LABEL_MARGIN = 15
 export const LINE_HEIGHT = 40
 export const COLORS = ['#ffe856', '#62cef0', '#86b475', '#a81f23', '#86a7b3', '#0f9d61']
 export const FONT = `20px "Segoe UI", "Microsoft YaHei", sans-serif`

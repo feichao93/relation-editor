@@ -1,16 +1,113 @@
 import * as d3 from 'd3'
-import { EventEmitter } from 'events'
 import { ARROW_MARGIN, LABEL_FONT, LINE_HEIGHT } from './constants'
+import DisposableEventEmitter from './DisposableEventEmitter'
 import { makeMeasurer } from './layout-utils'
 import { DefaultMap, IncrementalMap, randomId } from './utils'
 
-export const marginChange = 'margin-change'
-
-export interface ArrowInfo {
-  id: string
-  startId: string
-  endId: string
+enum Connection {
+  na = 'na',
+  include = 'include',
+  intersect = 'intersect',
+  disjoint = 'disjoint',
 }
+
+interface ArrowRange {
+  id: string
+  left: number
+  right: number
+}
+function calculateHeightLevels(ranges: ArrowRange[]) {
+  const size = ranges.length
+  const maxHeight = getMaxHeight()
+  const matrix = getConnectionMatrix()
+  const hs = new Array<number>(ranges.length).fill(0)
+
+  if (backtrack(0)) {
+    return hs
+  } else {
+    throw new Error('Fatal error: cannot assign height levels for these ranges')
+  }
+
+  // 给第 i 个 range 赋予高度 h
+  function backtrack(i: number) {
+    if (i === size) {
+      return true
+    }
+
+    // 根据 hs[0..i-1] 来决定 i 的高度
+    const containerHeight = d3.range(0, i).reduce((H, j) => {
+      if (matrix[i][j] === Connection.include) {
+        return Math.min(H, hs[j])
+      } else {
+        return H
+      }
+    }, maxHeight + 1)
+
+    if (containerHeight === 0) {
+      return false
+    }
+    for (let h = 1; h < containerHeight; h++) {
+      const conflict = d3
+        .range(0, i)
+        .some(j => matrix[i][j] === Connection.intersect && hs[j] === h)
+      if (conflict) {
+        continue
+      }
+      hs[i] = h
+      if (backtrack(i + 1)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  function getConnectionMatrix() {
+    const matrix: Connection[][] = []
+    for (let i = 0; i < size; i++) {
+      const row = new Array(size).fill(Connection.na)
+      const r1 = ranges[i]
+      for (let j = i + 1; j < size; j++) {
+        const r2 = ranges[j]
+        if (r2.left > r1.right) {
+          row[j] = Connection.disjoint
+        } else if (r2.right > r1.right) {
+          row[j] = Connection.intersect
+        } else {
+          row[j] = Connection.include
+        }
+      }
+      matrix.push(row)
+    }
+    for (let i = 0; i < size; i++) {
+      for (let j = 0; j < i; j++) {
+        matrix[i][j] = matrix[j][i]
+      }
+    }
+    return matrix
+  }
+
+  function getMaxHeight() {
+    const ticks = []
+    for (const { left, right } of ranges) {
+      ticks.push({ type: 'enter', x: left })
+      ticks.push({ type: 'exit', x: right })
+    }
+    ticks.sort((a, b) => a.x - b.x)
+    const { max } = ticks.reduce(
+      ({ cnt, max }, t) => {
+        if (t.type === 'enter') {
+          return { cnt: cnt + 1, max: Math.max(max, cnt + 1) }
+        } else {
+          return { cnt: cnt - 1, max }
+        }
+      },
+      { cnt: 0, max: 0 },
+    )
+    return max
+  }
+}
+
+export const marginChange = 'margin-change'
 
 export interface RectInfo {
   id: string
@@ -20,11 +117,11 @@ export interface RectInfo {
   fill: string
 }
 
-export interface TextInfo {
-  line: number
-  margin: number
-  center: number
-  textContent: string
+export interface ArrowInfo {
+  id: string
+  startId: string
+  endId: string
+  label: string
 }
 
 function getRectPos(rect: RectInfo) {
@@ -44,9 +141,8 @@ function sortBy<T>(arr: T[], fn: (item: T) => number[]) {
   })
 }
 
-export default class DecorationManager extends EventEmitter {
+export default class DecorationManager extends DisposableEventEmitter {
   private readonly rects: Array<RectInfo> = []
-  private readonly texts: Array<TextInfo> = []
   private readonly arrows: Array<ArrowInfo> = []
   private readonly wrapper: d3.Selection<SVGSVGElement, any, any, any>
   private readonly margins: number[] = []
@@ -75,35 +171,7 @@ export default class DecorationManager extends EventEmitter {
     this.updateRects()
   }
 
-  addText(textInfo: TextInfo) {
-    this.texts.push(textInfo)
-    this.updateTexts()
-  }
-
-  private updateTexts() {
-    const labelPlacementCount = new IncrementalMap<number>()
-
-    const rectJoin = this.wrapper
-      .select('.text-layer')
-      .selectAll<SVGTextElement, null>('text')
-      .data(this.texts)
-
-    const textEnter = rectJoin.enter().append('text')
-    rectJoin.exit().remove()
-    const text = rectJoin.merge(textEnter)
-
-    text
-      // TODO 创建一个 measurer 用来调整 x 的值
-      .attr('x', d => d.center - this.labelMeasure(d.textContent) / 2)
-      .attr('y', d => this.getY(d.line) - d.margin - 25 * labelPlacementCount.getAndInc(d.line))
-      .attr('font-size', 15)
-      .attr('fill', 'red')
-      .text(d => d.textContent)
-  }
-
   private updateArrows() {
-    const labelPlacementCount = new IncrementalMap<number>()
-
     const rectById = new Map(this.rects.map(rect => [rect.id, rect] as [string, RectInfo]))
     const sortedRects = sortBy(this.rects, rect => {
       const pos = getRectPos(rect)
@@ -132,7 +200,8 @@ export default class DecorationManager extends EventEmitter {
           (startId === id1 && endId === id2) || (startId === id2 && endId === id1),
       )
 
-    const tickInfoMap = new DefaultMap<string, { start: number; end: number }>(() => ({
+    /** 记录每个 arrow 的 startTick 与 endTick */
+    const tickMap = new DefaultMap<string, { start: number; end: number }>(() => ({
       start: -1,
       end: -1,
     }))
@@ -145,7 +214,7 @@ export default class DecorationManager extends EventEmitter {
       for (let i = 0; i < leftPart.length; i++) {
         const leftRectId = leftPart[i]
         const arrow = findArrow(baseRect.id, leftRectId)
-        const tickInfo = tickInfoMap.get(arrow.id)
+        const tickInfo = tickMap.get(arrow.id)
         // arrow 在 baseRect 上的 tick
         const tick = leftPart.length - 1 - i
         if (leftRectId === arrow.startId) {
@@ -153,13 +222,13 @@ export default class DecorationManager extends EventEmitter {
         } else {
           tickInfo.start = tick
         }
-        tickInfoMap.set(arrow.id, tickInfo)
+        tickMap.set(arrow.id, tickInfo)
       }
 
       for (let i = 0; i < rightPart.length; i++) {
         const rightRectId = rightPart[i]
         const arrow = findArrow(baseRect.id, rightRectId)
-        const tickInfo = tickInfoMap.get(arrow.id)
+        const tickInfo = tickMap.get(arrow.id)
         // arrow 在 baseRect 上的 tick
         const tick = rightPart.length - 1 - i + leftPart.length
         if (rightRectId === arrow.startId) {
@@ -167,7 +236,47 @@ export default class DecorationManager extends EventEmitter {
         } else {
           tickInfo.start = tick
         }
-        tickInfoMap.set(arrow.id, tickInfo)
+        tickMap.set(arrow.id, tickInfo)
+      }
+    }
+
+    /** 记录每个 arrow 的 startX 与 endX */
+    const xMap = new Map<string, { start: number; end: number }>()
+    for (const arrow of this.arrows) {
+      const startTick = tickMap.get(arrow.id).start
+      const startRect = rectById.get(arrow.startId)
+      const endRect = rectById.get(arrow.endId)
+      const startX =
+        startRect.left +
+        (startRect.width * (startTick + 1)) / (this.tickCountMap.get(startRect.id) + 1)
+      const endTick = tickMap.get(arrow.id).end
+      const endX =
+        endRect.left + (endRect.width * (endTick + 1)) / (this.tickCountMap.get(endRect.id) + 1)
+      xMap.set(arrow.id, { start: startX, end: endX })
+    }
+
+    const arrowLineById = new Map(
+      this.arrows.map(
+        arrow =>
+          [
+            arrow.id,
+            Math.min(rectById.get(arrow.startId).line, rectById.get(arrow.endId).line),
+          ] as [string, number],
+      ),
+    )
+
+    const heightMap = new Map<string, number>()
+    const maxLine = Math.max(...arrowLineById.values())
+    for (let line = 0; line <= maxLine; line++) {
+      const arrowsOnThisLine = this.arrows.filter(({ id }) => arrowLineById.get(id) === line)
+      let ranges = arrowsOnThisLine.map(({ id }) => {
+        const { start, end } = xMap.get(id)
+        return { id, left: Math.min(start, end), right: Math.max(start, end) }
+      })
+      ranges = sortBy(ranges, x => [x.left, x.right])
+      const heightLevels = calculateHeightLevels(ranges)
+      for (let i = 0; i < ranges.length; i++) {
+        heightMap.set(ranges[i].id, heightLevels[i])
       }
     }
 
@@ -188,23 +297,17 @@ export default class DecorationManager extends EventEmitter {
       .attr('stroke-linejoin', 'round')
       .merge(arrowJoin)
 
-    arrow.attr('d', d => {
+    arrow.attr('d', arrow => {
       const margin = ARROW_MARGIN
-      const startRect = this.rects.find(rect => rect.id === d.startId)
-      const endRect = this.rects.find(rect => rect.id === d.endId)
-      const labelLine = Math.min(startRect.line, endRect.line)
+      const startRect = rectById.get(arrow.startId)
+      const endRect = rectById.get(arrow.endId)
 
-      const startTick = tickInfoMap.get(d.id).start
-      const startX =
-        startRect.left +
-        (startRect.width * (startTick + 1)) / (this.tickCountMap.get(startRect.id) + 1)
-
-      const endTick = tickInfoMap.get(d.id).end
-      const endX =
-        endRect.left + (endRect.width * (endTick + 1)) / (this.tickCountMap.get(endRect.id) + 1)
+      const startX = xMap.get(arrow.id).start
+      const endX = xMap.get(arrow.id).end
 
       const startY = this.getY(startRect.line)
-      const labelY = this.getY(labelLine) - margin - 25 * labelPlacementCount.getAndInc(labelLine)
+      const labelLine = arrowLineById.get(arrow.id)
+      const labelY = this.getY(labelLine) - margin - 25 * (heightMap.get(arrow.id) - 1)
       const endY = this.getY(endRect.line)
 
       const path = d3.path()
@@ -217,6 +320,30 @@ export default class DecorationManager extends EventEmitter {
       path.lineTo(endX + 4, endY - 6)
       return path.toString()
     })
+
+    const textJoin = this.wrapper
+      .select('.text-layer')
+      .selectAll<SVGTextElement, null>('text')
+      .data(this.arrows, d => d.id)
+    textJoin.exit().remove()
+
+    const text = textJoin
+      .enter()
+      .append('text')
+      .merge(textJoin)
+
+    text
+      .attr('x', d => {
+        const { start, end } = xMap.get(d.id)
+        return (start + end) / 2 - this.labelMeasure(d.label) / 2
+      })
+      .attr('y', d => {
+        const labelLine = arrowLineById.get(d.id)
+        return this.getY(labelLine) - 25 * heightMap.get(d.id) + 10
+      })
+      .attr('font-size', 15)
+      .attr('fill', 'red')
+      .text(d => d.label)
   }
 
   private updateRects() {
@@ -251,9 +378,8 @@ export default class DecorationManager extends EventEmitter {
     while (this.margins.length < line + 1) {
       this.margins.push(0)
     }
-    const oldMargin = this.margins[line]
     this.margins[line] = margin
-    this.emit(marginChange, line, margin, oldMargin)
+    this.emit(marginChange, this.margins)
   }
 
   addArrow(arrowInfo: ArrowInfo) {
@@ -273,9 +399,6 @@ export default class DecorationManager extends EventEmitter {
 
   update() {
     this.updateRects()
-    // TODO texts 和 arrows 应该一起绘制
-    //  不然保持 text/arrow 的高度依赖于 this.arrows/this.texts 中元素的顺序
-    this.updateTexts()
     this.updateArrows()
   }
 }

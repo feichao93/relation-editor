@@ -1,6 +1,5 @@
 import * as d3 from 'd3'
 import invariant from 'invariant'
-import { LABEL_MARGIN } from './constants'
 import DecorationManager, { marginChange } from './DecorationManager'
 import { layout, makeMeasurer, makeRower } from './layout-utils'
 import { Entity, Link } from './types'
@@ -20,10 +19,12 @@ export default class RelationEditor {
     this.rower = makeRower(this.contentWrapper.clientWidth, makeMeasurer(font))
     this.decorations = new DecorationManager(div)
 
-    this.decorations.on(marginChange, (line: number, margin: number) => {
-      // 更新 line-div 的位置
-      const lineDiv = this.contentWrapper.children.item(line) as HTMLDivElement
-      lineDiv.style.marginTop = `${margin}px`
+    this.decorations.on(marginChange, (margins: number[]) => {
+      for (let i = 0; i < margins.length; i++) {
+        // 更新 line-div 的位置
+        const lineDiv = this.contentWrapper.children.item(i) as HTMLDivElement
+        lineDiv.style.marginTop = `${margins[i]}px`
+      }
     })
   }
 
@@ -94,26 +95,18 @@ export default class RelationEditor {
     const B = this.getEntityInfo(link.b)
     this.decorations.addRect(A)
     this.decorations.addRect(B)
-
-    // 关系的标签需要放置在 labelLine 的 margin 中
-    const labelLine = Math.min(A.line, B.line)
-    // TODO center 的坐标需要详细计算
-    const center = (A.left + A.width / 2 + B.left + B.width / 2) / 2
-    this.decorations.addText({
-      line: labelLine,
-      textContent: link.label,
-      center,
-      margin: LABEL_MARGIN,
-    })
-
     this.decorations.addArrow({
       id: link.id,
       startId: link.a,
       endId: link.b,
+      label: link.label,
     })
 
     return link.id
   }
 
-  // TODO dispose() {}
+  dispose() {
+    this.decorations.dispose()
+    // TODO 移除 editor 往 DOM 中添加的那些元素
+  }
 }

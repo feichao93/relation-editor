@@ -1,6 +1,6 @@
 import * as d3 from 'd3'
 import invariant from 'invariant'
-import DecorationManager, { marginChange } from './DecorationManager'
+import DecorationManager, { marginsChange } from './DecorationManager'
 import { layout, makeMeasurer, makeRower } from './layout-utils'
 import { Entity, Link } from './types'
 
@@ -19,7 +19,7 @@ export default class RelationEditor {
     this.rower = makeRower(this.contentWrapper.clientWidth, makeMeasurer(font))
     this.decorations = new DecorationManager(div)
 
-    this.decorations.on(marginChange, (margins: number[]) => {
+    this.decorations.on(marginsChange, (margins: number[]) => {
       for (let i = 0; i < margins.length; i++) {
         // 更新 line-div 的位置
         const lineDiv = this.contentWrapper.children.item(i) as HTMLDivElement
@@ -95,7 +95,7 @@ export default class RelationEditor {
     const B = this.getEntityInfo(link.b)
     this.decorations.addRect(A)
     this.decorations.addRect(B)
-    this.decorations.addArrow({
+    this.decorations.addLink({
       id: link.id,
       startId: link.a,
       endId: link.b,

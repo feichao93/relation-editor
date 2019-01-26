@@ -36,3 +36,11 @@ export function sortBy<T>(arr: T[], fn: (item: T) => number[]) {
     return 0
   })
 }
+
+export function pairwise<T>(arr: T[]) {
+  const result = []
+  for (let i = 0; i < arr.length - 1; i++) {
+    result.push([arr[i], arr[i + 1]] as [T, T])
+  }
+  return result
+}

@@ -7,7 +7,7 @@ export interface Link {
 
 export interface Entity {
   id: string
-  s: number
+  startPos: number
   color: string
-  e: number
+  endPos: number
 }

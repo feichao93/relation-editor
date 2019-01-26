@@ -62,9 +62,11 @@ export default class DecorationManager extends DisposableEventEmitter {
     return this.margins.slice(0, line + 1).reduce((x, y) => x + y, line * LINE_HEIGHT)
   }
 
-  addRect(rectInfo: RectInfo) {
-    this.rects.push(rectInfo)
-    this.updateRects()
+  addRect(newRect: RectInfo) {
+    if (!this.rects.some(rect => rect.id === newRect.id)) {
+      this.rects.push(newRect)
+      this.updateRects()
+    }
   }
 
   private compute(): ComputeResult {
@@ -293,6 +295,7 @@ export default class DecorationManager extends DisposableEventEmitter {
     this.updateRects()
     const computeResult = this.compute()
     this.updateMargins(computeResult)
+    this.updateRects()
     this.updateLinks(computeResult)
   }
 }

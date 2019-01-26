@@ -7,6 +7,7 @@ import { Entity, Link } from './types'
 export default class RelationEditor {
   private readonly contentWrapper: HTMLDivElement
   private readonly decorations: DecorationManager
+  private lineBreaks: number[]
 
   /** editor 使用的分行器 */
   private readonly rower: (text: string) => number[]
@@ -20,16 +21,21 @@ export default class RelationEditor {
     this.decorations = new DecorationManager(div)
 
     this.decorations.on(marginsChange, (margins: number[]) => {
-      for (let i = 0; i < margins.length; i++) {
+      for (let i = 0; i < this.lineBreaks.length; i++) {
         // 更新 line-div 的位置
         const lineDiv = this.contentWrapper.children.item(i) as HTMLDivElement
-        lineDiv.style.marginTop = `${margins[i]}px`
+        lineDiv.style.marginTop = `${margins[i] || 15}px` // TODO 15 is magic number
       }
     })
   }
 
+  getText() {
+    return this.text
+  }
+
   setText(text: string) {
     this.text = text
+    this.lineBreaks = this.rower(text)
     this.update()
   }
 
@@ -46,7 +52,7 @@ export default class RelationEditor {
   }
 
   private update() {
-    const lineInfoList = layout(this.rower(this.text), this.entities)
+    const lineInfoList = layout(this.lineBreaks, this.entities)
     const lineJoin = d3
       .select(this.contentWrapper)
       .selectAll<HTMLDivElement, null>('.line')
@@ -59,12 +65,14 @@ export default class RelationEditor {
       .attr('data-line', (d, i) => i)
       .merge(lineJoin)
 
-    const spanJoin = line.selectAll('span').data(d => d, (d: Partial<Entity>) => `${d.s}-${d.e}`)
+    const spanJoin = line
+      .selectAll<HTMLSpanElement, null>('span')
+      .data(d => d, (d: Partial<Entity>) => `${d.startPos}-${d.endPos}`)
     spanJoin.exit().remove()
     spanJoin
       .enter()
       .append('span')
-      .text(d => this.text.substring(d.s, d.e))
+      .text(d => this.text.substring(d.startPos, d.endPos))
       .style('color', d => d.color)
       .attr('data-id', d => d.id)
   }
@@ -84,13 +92,7 @@ export default class RelationEditor {
     return { id, line, left, width: box.width, fill: 'steelblue' }
   }
 
-  addLink(a: string, label: string, b: string) {
-    // TODO 测试用 id
-    const testId = `${a}-${label}-${b}`
-    return this._addLink({ id: testId, a, b, label })
-  }
-
-  private _addLink(link: Link) {
+  addLink(link: Link) {
     const A = this.getEntityInfo(link.a)
     const B = this.getEntityInfo(link.b)
     this.decorations.addRect(A)

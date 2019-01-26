@@ -15,7 +15,7 @@ export interface LinkRange {
 
 export default function calculateHeightLevels(ranges: LinkRange[]) {
   const size = ranges.length
-  const maxHeightLevel = getMaxHeightLevel()
+  const maxHeightLevel = ranges.length
   const matrix = getConnectionMatrix()
   const heightLevels = new Array<number>(ranges.length).fill(0)
 
@@ -81,25 +81,5 @@ export default function calculateHeightLevels(ranges: LinkRange[]) {
       }
     }
     return matrix
-  }
-
-  function getMaxHeightLevel() {
-    const ticks = []
-    for (const { left, right } of ranges) {
-      ticks.push({ type: 'enter', x: left })
-      ticks.push({ type: 'exit', x: right })
-    }
-    ticks.sort((a, b) => a.x - b.x)
-    const { max } = ticks.reduce(
-      ({ cnt, max }, t) => {
-        if (t.type === 'enter') {
-          return { cnt: cnt + 1, max: Math.max(max, cnt + 1) }
-        } else {
-          return { cnt: cnt - 1, max }
-        }
-      },
-      { cnt: 0, max: 0 },
-    )
-    return max
   }
 }

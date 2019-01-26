@@ -1,4 +1,5 @@
 import { Entity } from './types'
+import { pairwise } from './utils'
 
 // TODO 不直接使用 .width 应该有更好的效果
 export function makeMeasurer(font: string) {
@@ -35,30 +36,27 @@ export function makeRower(targetWidth: number, measurer: (s: string) => number) 
   }
 }
 
-function pairwise(arr: number[]) {
-  const result = []
-  for (let i = 0; i < arr.length - 1; i++) {
-    result.push([arr[i], arr[i + 1]] as [number, number])
-  }
-  return result
-}
-
 export function layout(breaks: number[], entities: Entity[]) {
   const result = []
-  entities.sort((e1, e2) => e1.s - e2.s)
+  entities.sort((e1, e2) => e1.startPos - e2.startPos)
   let i = 0
   for (const [lineStart, lineEnd] of pairwise([0, ...breaks])) {
     const line = []
     let t = lineStart
     while (t < lineEnd) {
-      if (i < entities.length && t === entities[i].s) {
-        line.push({ id: entities[i].id, s: t, e: entities[i].e, color: entities[i].color })
-        t = entities[i].e
+      if (i < entities.length && t === entities[i].startPos) {
+        line.push({
+          id: entities[i].id,
+          startPos: t,
+          endPos: entities[i].endPos,
+          color: entities[i].color,
+        })
+        t = entities[i].endPos
         i++
       } else {
-        const e = i < entities.length ? Math.min(lineEnd, entities[i].s) : lineEnd
-        line.push({ s: t, e })
-        t = e
+        const endPos = i < entities.length ? Math.min(lineEnd, entities[i].startPos) : lineEnd
+        line.push({ startPos: t, endPos })
+        t = endPos
       }
     }
     result.push(line)

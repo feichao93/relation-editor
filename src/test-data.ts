@@ -59,4 +59,6 @@ export const useReactTestData = (editor: RelationEditor) => {
   addLink('React#7', '@并列', 'React Native')
   addLink('React#7', '@开源', 'GitHub')
   addLink('加星数量', '@排名', '第二')
+  
+  addLink('Facebook', '@开发', '它')
 }

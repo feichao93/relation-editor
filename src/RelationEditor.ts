@@ -1,7 +1,7 @@
 import * as d3 from 'd3'
 import invariant from 'invariant'
 import DecorationManager, { marginsChange } from './DecorationManager'
-import { layout, makeMeasurer, makeRower } from './layout-utils'
+import { layout, LayoutSpan, makeMeasurer, makeRower } from './layout-utils'
 import { Entity, Link } from './types'
 
 export default class RelationEditor {
@@ -67,20 +67,21 @@ export default class RelationEditor {
 
     const spanJoin = line
       .selectAll<HTMLSpanElement, null>('span')
-      .data(d => d, (d: Partial<Entity>) => `${d.startPos}-${d.endPos}`)
+      .data(d => d, (d: LayoutSpan) => `${d.startPos}-${d.endPos}`)
     spanJoin.exit().remove()
     spanJoin
       .enter()
       .append('span')
       .text(d => this.text.substring(d.startPos, d.endPos))
-      .style('color', d => d.color)
-      .attr('data-id', d => d.id)
+      .style('color', d => (d.type === 'entity-span' ? d.color : null))
+      .attr('data-id', d => (d.type === 'entity-span' ? d.id : null))
+      .attr('data-part', d => (d.type === 'entity-span' ? d.part : null))
   }
 
   private getEntityInfo(id: string) {
     const span = d3
       .select(this.div)
-      .select(`[data-id="${id}"]`)
+      .select(`[data-id="${id}"][data-part="0"]`) // 总是选择 part=0 用于绘制连线
       .node() as HTMLSpanElement
     invariant(
       span != null,

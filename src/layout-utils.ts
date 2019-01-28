@@ -36,26 +36,63 @@ export function makeRower(targetWidth: number, measurer: (s: string) => number) 
   }
 }
 
+export type LayoutSpan = EntitySpan | TextSpan
+export interface EntitySpan {
+  type: 'entity-span'
+  id: string
+  part: number
+  startPos: number
+  endPos: number
+  color: string
+}
+export interface TextSpan {
+  type: 'text-span'
+  startPos: number
+  endPos: number
+}
+
 export function layout(breaks: number[], entities: Entity[]) {
   const result = []
   entities.sort((e1, e2) => e1.startPos - e2.startPos)
-  let i = 0
+  // index: index of current entity
+  // part: part-count of current entity
+  let [index, part] = [0, 0]
   for (const [lineStart, lineEnd] of pairwise([0, ...breaks])) {
-    const line = []
+    const line: LayoutSpan[] = []
     let t = lineStart
     while (t < lineEnd) {
-      if (i < entities.length && t === entities[i].startPos) {
-        line.push({
-          id: entities[i].id,
-          startPos: t,
-          endPos: entities[i].endPos,
-          color: entities[i].color,
-        })
-        t = entities[i].endPos
-        i++
+      if (index < entities.length && t >= entities[index].startPos) {
+        if (entities[index].endPos <= lineEnd) {
+          // 实体不跨行
+          line.push({
+            type: 'entity-span',
+            id: entities[index].id,
+            part,
+            startPos: t,
+            endPos: entities[index].endPos,
+            color: entities[index].color,
+          })
+          t = entities[index].endPos
+          index++
+          part = 0
+        } else {
+          // 跨行实体
+          line.push({
+            type: 'entity-span',
+            id: entities[index].id,
+            part,
+            startPos: t,
+            endPos: lineEnd,
+            color: entities[index].color,
+          })
+          t = lineEnd
+          // index 保持不变
+          part++
+        }
       } else {
-        const endPos = i < entities.length ? Math.min(lineEnd, entities[i].startPos) : lineEnd
-        line.push({ startPos: t, endPos })
+        const endPos =
+          index < entities.length ? Math.min(lineEnd, entities[index].startPos) : lineEnd
+        line.push({ type: 'text-span', startPos: t, endPos })
         t = endPos
       }
     }
